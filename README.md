@@ -15,10 +15,10 @@ Antes de executar o código, você precisa ter o seguinte instalado em seu siste
 
 1. Clone este repositório:
 
-   ```bash
+```bash
    git clone https://github.com/LucasWPL/nfse-xml-dowload-rpa.git
    cd nfse-xml-dowload-rpa
-   ```
+```
 
 2. Instale as dependências
 ```bash
