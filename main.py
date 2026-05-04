@@ -1,94 +1,46 @@
-from dotenv import load_dotenv
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.options import Options
-from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-import os
 import time
 
-load_dotenv()
+from src.browser import setup_driver
+from src.config import iter_period_windows, load_settings, resolve_period
+from src.download_service import DownloadService
+from src.logger import AppLogger
+from src.portal_client import PortalClient
+from src.workflow import process_window
 
-def setup_driver():
-    download_path = os.getenv("DOWNLOAD_PATH")
-    chrome_options = Options()
-    chrome_options.add_experimental_option("prefs", {
-        "download.default_directory": download_path,
-        "download.prompt_for_download": False,
-        "safebrowsing.enabled": True
-    })
-    
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
-    return driver
 
-def login(driver):
+def main() -> None:
+    settings = load_settings()
+    logger = AppLogger(settings.debug)
+    driver, download_dir = setup_driver(settings)
+    portal = PortalClient(driver, settings, logger)
+    downloads = DownloadService(download_dir, logger)
+
     try:
-        driver.get("https://www.nfse.gov.br/EmissorNacional/Login")
-        WebDriverWait(driver, 10).until(
-            EC.visibility_of_element_located((By.NAME, "Inscricao"))
-        ).send_keys(os.getenv("USERNAME"))
-        
-        driver.find_element(By.NAME, "Senha").send_keys(os.getenv("PASSWORD"))
-        driver.find_element(By.TAG_NAME, "form").submit()
+        start_date, end_date = resolve_period(settings)
+        total_downloads = 0
 
-        time.sleep(1)
-    except Exception as e:
-        raise Exception(f"Erro no login: {e}")
+        portal.login()
 
-def navigate_to_notas_emitidas(driver, page=1):
-    try:
-        driver.get(f"https://www.nfse.gov.br/EmissorNacional/Notas/Emitidas?pg={page}")
-
-        time.sleep(3)
-    except Exception as e:
-        raise Exception(f"Erro ao navegar para 'Notas Emitidas': {e}")
-
-def download_links_paginated(driver):
-    page = 1
-    while True:
-        try:
-            print(f"Processando página {page}...")
-
-            no_records_element = driver.find_elements(By.CLASS_NAME, "sem-registros")
-            if no_records_element:
-                print("Nenhum registro encontrado. Finalizando o processo.")
-                break
-
-            download_links = driver.find_elements(
-                By.XPATH, "//a[contains(@href, '/Download/NFSe') and @class='list-group-item']"
+        for window_start, window_end in iter_period_windows(
+            start_date=start_date,
+            end_date=end_date,
+            max_period_days=settings.max_period_days,
+        ):
+            total_downloads += process_window(
+                portal=portal,
+                downloads=downloads,
+                logger=logger,
+                start_date=window_start,
+                end_date=window_end,
             )
 
-            if download_links:
-                for i, link in enumerate(download_links):
-                    download_url = link.get_attribute('href')
-                    driver.get(download_url)
-                    print(f"Download {i + 1} concluído.")
-
-                    time.sleep(1)
-            else:
-                print("Nenhum link de download encontrado.")
-            
-            page += 1
-            navigate_to_notas_emitidas(driver, page)
-        
-        except Exception as e:
-            raise Exception(f"Erro ao processar a página {page}: {e}")
-            break
-
-def main():
-    driver = setup_driver()
-
-    try:
-        login(driver)
-        navigate_to_notas_emitidas(driver)
-        download_links_paginated(driver)
-    except Exception as e:
-        print(f"Erro no processo geral: {e}")
+        logger.info(f"Processo finalizado com {total_downloads} arquivo(s) baixado(s).")
+    except Exception as exc:
+        logger.info(f"Erro no processo geral: {exc}")
     finally:
         time.sleep(2)
         driver.quit()
+
 
 if __name__ == "__main__":
     main()
