@@ -1,5 +1,5 @@
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -74,12 +74,34 @@ def load_settings() -> Settings:
     )
 
 
+def merge_settings(base: Settings, overrides: dict[str, object]) -> Settings:
+    merged = {field.name: getattr(base, field.name) for field in fields(Settings)}
+
+    for key, value in overrides.items():
+        if value is None or key not in merged:
+            continue
+        merged[key] = value
+
+    return Settings(
+        nfse_username=str(merged["nfse_username"]).strip(),
+        nfse_password=str(merged["nfse_password"]).strip(),
+        download_path=Path(str(merged["download_path"])).expanduser().resolve(),
+        start_date_input=str(merged["start_date_input"]).strip(),
+        end_date_input=str(merged["end_date_input"]).strip(),
+        months_back=int(merged["months_back"]),
+        max_period_days=int(merged["max_period_days"]),
+        wait_timeout=int(merged["wait_timeout"]),
+        headless=bool(merged["headless"]),
+        debug=bool(merged["debug"]),
+    )
+
+
 def parse_iso_date(raw_value: str, field_name: str) -> date:
     try:
         return datetime.strptime(raw_value, DATE_FORMAT).date()
     except ValueError as exc:
         raise RuntimeError(
-            f"{field_name} invalida. Use o formato YYYY-MM-DD. Valor recebido: {raw_value}"
+            f"{field_name} inválida. Use o formato YYYY-MM-DD. Valor recebido: {raw_value}"
         ) from exc
 
 
@@ -94,7 +116,7 @@ def resolve_period(settings: Settings) -> tuple[date, date]:
             start_date = (start_date - timedelta(days=1)).replace(day=1)
 
     if start_date > end_date:
-        raise RuntimeError("START_DATE nao pode ser maior que END_DATE.")
+        raise RuntimeError("START_DATE não pode ser maior que END_DATE.")
 
     if settings.max_period_days < 1 or settings.max_period_days > 30:
         raise RuntimeError("MAX_PERIOD_DAYS deve estar entre 1 e 30.")

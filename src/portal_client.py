@@ -170,7 +170,7 @@ class PortalClient:
             for element in elements:
                 if element.is_displayed():
                     return element, f"{by}={selector}"
-        raise RuntimeError(f"Elemento nao encontrado para os seletores: {selectors}")
+        raise RuntimeError(f"Elemento não encontrado para os seletores: {selectors}")
 
     def set_input_value(self, element: WebElement, value: str) -> None:
         self.driver.execute_script(
@@ -220,7 +220,7 @@ class PortalClient:
         current_value = (element.get_attribute("value") or "").strip()
         if not field_value_matches(current_value, value):
             raise RuntimeError(
-                f"Nao foi possivel preencher o campo com {value!r}. Campo localizado: {self.element_summary(element)}"
+                f"Não foi possível preencher o campo com {value!r}. Campo localizado: {self.element_summary(element)}"
             )
 
     def click_first_available(self, selectors: list[tuple[str, str]], description: str) -> bool:
@@ -254,7 +254,7 @@ class PortalClient:
             password_input, password_selector = self.find_first_visible(LOGIN_PASSWORD_SELECTORS)
 
             self.logger.debug(
-                f"Campo de usuario localizado por {username_selector}: {self.element_summary(username_input)}"
+                f"Campo de usuário localizado por {username_selector}: {self.element_summary(username_input)}"
             )
             self.logger.debug(
                 f"Campo de senha localizado por {password_selector}: {self.element_summary(password_input)}"
@@ -273,8 +273,8 @@ class PortalClient:
                     password_input,
                 )
                 if not form:
-                    raise RuntimeError("Nao foi possivel localizar o botao ou formulario de login.")
-                self.logger.debug("Botao de login nao encontrado. Enviando formulario como fallback.")
+                    raise RuntimeError("Não foi possível localizar o botão ou formulário de login.")
+                self.logger.debug("Botão de login não encontrado. Enviando formulário como fallback.")
                 self.driver.execute_script("arguments[0].requestSubmit();", form)
 
             WebDriverWait(self.driver, self.settings.wait_timeout).until(
@@ -283,7 +283,7 @@ class PortalClient:
             )
 
             if "login" in self.driver.current_url.lower():
-                raise RuntimeError("Login nao concluiu com sucesso. A pagina permaneceu na rota de login.")
+                raise RuntimeError("Login não foi concluído com sucesso. A página permaneceu na rota de login.")
 
             time.sleep(2)
         except Exception as exc:
@@ -325,10 +325,10 @@ class PortalClient:
                 end_input,
             )
             if form:
-                self.logger.debug("Botao de consulta nao encontrado. Enviando formulario como fallback.")
+                self.logger.debug("Botão de consulta não encontrado. Enviando formulário como fallback.")
                 self.driver.execute_script("arguments[0].requestSubmit();", form)
             else:
-                raise RuntimeError("Nao foi possivel localizar o botao de consulta da tela.")
+                raise RuntimeError("Não foi possível localizar o botão de consulta da tela.")
 
         try:
             WebDriverWait(self.driver, self.settings.wait_timeout).until(

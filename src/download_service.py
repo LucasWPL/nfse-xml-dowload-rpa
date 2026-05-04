@@ -3,9 +3,11 @@ import shutil
 import time
 from datetime import date
 from pathlib import Path
+from threading import Event
 
 from selenium import webdriver
 
+from .cancellation import ensure_not_cancelled
 from .logger import AppLogger
 from .models import DownloadEntry
 
@@ -15,9 +17,15 @@ class DownloadService:
         self.download_dir = download_dir
         self.logger = logger
 
-    def wait_for_download(self, known_files: set[str], timeout: int = 120) -> Path:
+    def wait_for_download(
+        self,
+        known_files: set[str],
+        timeout: int = 120,
+        stop_event: Event | None = None,
+    ) -> Path:
         end_time = time.time() + timeout
         while time.time() < end_time:
+            ensure_not_cancelled(stop_event)
             current_files = {path.name for path in self.download_dir.iterdir() if path.is_file()}
             new_names = current_files - known_files
 
@@ -35,7 +43,7 @@ class DownloadService:
 
             time.sleep(1)
 
-        raise RuntimeError("Timeout aguardando o download finalizar.")
+        raise RuntimeError("Tempo limite excedido aguardando o download finalizar.")
 
     def ensure_unique_destination(self, destination: Path, download_key: str | None) -> Path:
         if not destination.exists():
@@ -132,23 +140,31 @@ class DownloadService:
         window_start: date,
         download_key: str | None,
         entry: DownloadEntry,
-    ) -> Path:
+    ) -> tuple[Path, bool]:
         target_date = note_date or window_start
         file_type = self.infer_file_type(entry, file_path)
         target_dir = self.download_dir / str(target_date.year) / file_type
         target_dir.mkdir(parents=True, exist_ok=True)
 
         target_name = self.build_destination_filename(file_path, entry, download_key, file_type)
-        destination = self.ensure_unique_destination(target_dir / target_name, download_key)
+        exact_destination = target_dir / target_name
+
+        if exact_destination.exists():
+            file_path.unlink(missing_ok=True)
+            return exact_destination, True
+
+        destination = self.ensure_unique_destination(exact_destination, download_key)
         shutil.move(str(file_path), destination)
-        return destination
+        return destination, False
 
     def download_entry(
         self,
         driver: webdriver.Chrome,
         entry: DownloadEntry,
         window_start: date,
+        stop_event: Event | None = None,
     ) -> tuple[Path, bool]:
+        ensure_not_cancelled(stop_event)
         existing_file = self.find_existing_download(
             note_date=entry.note_date,
             window_start=window_start,
@@ -159,13 +175,13 @@ class DownloadService:
 
         before = {path.name for path in self.download_dir.iterdir() if path.is_file()}
         driver.get(entry.href)
-        downloaded_file = self.wait_for_download(before)
+        downloaded_file = self.wait_for_download(before, stop_event=stop_event)
 
-        saved_path = self.move_downloaded_file(
+        saved_path, skipped = self.move_downloaded_file(
             file_path=downloaded_file,
             note_date=entry.note_date,
             window_start=window_start,
             download_key=entry.download_key,
             entry=entry,
         )
-        return saved_path, False
+        return saved_path, skipped
